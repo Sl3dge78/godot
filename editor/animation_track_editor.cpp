@@ -1567,10 +1567,30 @@ void AnimationTimelineEdit::_notification(int p_what) {
 
 void AnimationTimelineEdit::set_animation(const Ref<Animation> &p_animation) {
 	animation = p_animation;
+
 	if (animation.is_valid()) {
+		play_position->show();
 		len_hb->show();
 		add_track->show();
-		play_position->show();
+
+		bool read_only = false;
+		for (int i = 0; i < animation->get_track_count(); i++) {
+			if (animation->track_is_imported(i)) {
+				read_only = true;
+				break;
+			}
+		}
+
+		if (read_only) {
+			add_track->set_disabled(true);
+			length->set_read_only(true);
+			loop->set_disabled(true);
+		} else {
+			add_track->set_disabled(false);
+			length->set_read_only(false);
+			loop->set_disabled(false);
+		}
+
 	} else {
 		len_hb->hide();
 		add_track->hide();
@@ -1831,6 +1851,11 @@ void AnimationTrackEdit::_notification(int p_what) {
 		Color linecolor = color;
 		linecolor.a = 0.2;
 
+		Color color_icon = Color(1.0, 1.0, 1.0, 1.0);
+		if (animation->track_is_imported(track)) {
+			color_icon.a = 0.5;
+		}
+
 		// NAMES AND ICONS //
 
 		{
@@ -1839,7 +1864,7 @@ void AnimationTrackEdit::_notification(int p_what) {
 			int ofs = in_group ? check->get_width() : 0; //not the best reference for margin but..
 
 			check_rect = Rect2(Point2(ofs, int(get_size().height - check->get_height()) / 2), check->get_size());
-			draw_texture(check, check_rect.position);
+			draw_texture(check, check_rect.position, color_icon);
 			ofs += check->get_width() + hsep;
 
 			Ref<Texture2D> type_icon = type_icons[animation->track_get_type(track)];
@@ -2069,14 +2094,15 @@ void AnimationTrackEdit::_notification(int p_what) {
 
 			{
 				//erase
+				if (!animation->track_is_imported(track)) {
+					Ref<Texture2D> icon = get_theme_icon("Remove", "EditorIcons");
 
-				Ref<Texture2D> icon = get_theme_icon("Remove", "EditorIcons");
+					remove_rect.position.x = ofs + ((get_size().width - ofs) - icon->get_width()) / 2;
+					remove_rect.position.y = int(get_size().height - icon->get_height()) / 2;
+					remove_rect.size = icon->get_size();
 
-				remove_rect.position.x = ofs + ((get_size().width - ofs) - icon->get_width()) / 2;
-				remove_rect.position.y = int(get_size().height - icon->get_height()) / 2;
-				remove_rect.size = icon->get_size();
-
-				draw_texture(icon, remove_rect.position);
+					draw_texture(icon, remove_rect.position);
+				}
 			}
 		}
 
@@ -2200,7 +2226,12 @@ void AnimationTrackEdit::draw_key(int p_index, float p_pixels_sec, int p_x, bool
 		}
 	}
 
-	draw_texture(icon_to_draw, ofs);
+	Color key_color = Color(1.0, 1.0, 1.0, 1.0);
+	if (animation->track_is_imported(track)) {
+		key_color.a = .5;
+	}
+
+	draw_texture(icon_to_draw, ofs, key_color);
 }
 
 //helper
@@ -2531,6 +2562,10 @@ String AnimationTrackEdit::get_tooltip(const Point2 &p_pos) const {
 }
 
 void AnimationTrackEdit::_gui_input(const Ref<InputEvent> &p_event) {
+	bool read_only = false;
+	if (animation->track_is_imported(track))
+		read_only = true;
+
 	if (p_event->is_pressed()) {
 		if (ED_GET_SHORTCUT("animation_editor/duplicate_selection")->is_shortcut(p_event)) {
 			emit_signal("duplicate_request");
@@ -3149,6 +3184,7 @@ void AnimationTrackEditor::set_animation(const Ref<Animation> &p_anim) {
 		for (int i = 0; i < animation->get_track_count(); i++) {
 			if (animation->track_is_imported(i)) {
 				imported_anim_warning->show();
+				edit->set_disabled(true);
 				break;
 			}
 		}
@@ -5634,7 +5670,7 @@ AnimationTrackEditor::AnimationTrackEditor() {
 
 	imported_anim_warning = memnew(Button);
 	imported_anim_warning->hide();
-	imported_anim_warning->set_tooltip(TTR("Warning: Editing imported animation"));
+	imported_anim_warning->set_text(TTR("Warning: Editing imported animation"));
 	imported_anim_warning->connect("pressed", callable_mp(this, &AnimationTrackEditor::_show_imported_anim_warning));
 	bottom_hb->add_child(imported_anim_warning);
 
